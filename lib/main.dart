@@ -1,6 +1,180 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as provider_pkg;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:app_links/app_links.dart';
+
+class AuthProvider extends ChangeNotifier {
+  bool _isAuthenticated = false;
+  bool _isLoading = false;
+  String? _error;
+  User? _user;
+  late final AppLinks _appLinks;
+
+  bool get isAuthenticated => _isAuthenticated;
+  bool get isLoading => _isLoading;
+  String? get error => _error;
+  User? get user => _user;
+
+  AuthProvider() {
+    if (!kIsWeb) {
+      _appLinks = AppLinks();
+      _initDeepLinks();
+    }
+
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      print('Auth state changed: ${data.event}');
+      final session = data.session;
+      _isAuthenticated = session != null;
+      _user = session?.user;
+      _isLoading = false;
+
+      if (session != null) {
+        print('User signed in: ${_user?.email}');
+      }
+
+      notifyListeners();
+    });
+    _checkAuthStatus();
+  }
+
+  void _initDeepLinks() {
+    _appLinks.uriLinkStream.listen((Uri? uri) {
+      print('Received deep link: $uri');
+      if (uri != null) {
+        print('Deep link received: $uri');
+        _handleDeepLink(uri);
+      }
+    });
+  }
+
+  void _handleDeepLink(Uri uri) async {
+    if (uri.scheme == 'myapp' && uri.host == 'login-callback') {
+      print('OAuth callback detected');
+    }
+  }
+
+  Future<void> _checkAuthStatus() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final session = Supabase.instance.client.auth.currentSession;
+      _isAuthenticated = session != null;
+      _user = session?.user;
+      print('Session check - authenticated: $_isAuthenticated');
+    } catch (e) {
+      _error = 'Erro ao verificar status de autenticação: $e';
+      print('Error checking auth: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> signInWithGoogle() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      print('Iniciando login com Google...');
+
+      if (kIsWeb) {
+        // Para web, não precisa de redirectTo customizado
+        await Supabase.instance.client.auth.signInWithOAuth(
+          OAuthProvider.google,
+          redirectTo: Uri.base.origin,
+        );
+      } else {
+        // Para mobile
+        await Supabase.instance.client.auth.signInWithOAuth(
+          OAuthProvider.google,
+          redirectTo: 'myapp://login-callback',
+          authScreenLaunchMode: LaunchMode.externalApplication,
+        );
+      }
+
+      print('OAuth initiated successfully');
+      return true;
+    } catch (e) {
+      _error = 'Erro ao fazer login com Google: $e';
+      print('Erro no login com Google: $e');
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> signOut() async {
+    await Supabase.instance.client.auth.signOut();
+    _isAuthenticated = false;
+    _user = null;
+    notifyListeners();
+  }
+}
+
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final authProvider = context.watch<AuthProvider>();
+
+    return Scaffold(
+      body: Center(
+        child: ElevatedButton.icon(
+          onPressed: () async {
+            final success = await authProvider.signInWithGoogle();
+            if (!success) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(authProvider.error ?? 'Erro desconhecido'),
+                ),
+              );
+            }
+          },
+          icon: Icon(Icons.g_mobiledata, size: 24),
+          label: Text('Login com Google'),
+        ),
+      ),
+    );
+  }
+}
+
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final authProvider = context.watch<AuthProvider>();
+
+    if (authProvider.isLoading) {
+      return Scaffold(body: Center(child: CircularProgressIndicator()));
+    } else if (authProvider.isAuthenticated) {
+      return HomeScreen();
+    } else {
+      return LoginScreen();
+    }
+  }
+}
 
 class RoundProvider extends ChangeNotifier {
   int _currentRound = 1;
@@ -72,7 +246,7 @@ class GameProvider extends ChangeNotifier {
           .eq('rounds_id', roundNumber);
 
       _games = (results as List).map((e) => Game.fromMap(e)).toList();
-      if (_games.length == 0) {
+      if (_games.isEmpty) {
         print('No games found for round $roundNumber');
       } else {
         print('Games found for round $roundNumber: ${_games.length}');
@@ -200,6 +374,9 @@ void main() async {
     url: 'https://douwctlommhpagyfdanb.supabase.co',
     anonKey:
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRvdXdjdGxvbW1ocGFneWZkYW5iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwOTA0NzAsImV4cCI6MjA3OTY2NjQ3MH0.MOQddEYhLsaNgGc7tkdokMlQqL9olI0hV-qJsnBBwCs',
+    authOptions: FlutterAuthClientOptions(
+      authFlowType: AuthFlowType.pkce, // ADICIONE
+    ),
   );
   /*
   await Supabase.instance.client.from('Equipe').insert([
@@ -262,24 +439,38 @@ void main() async {
   }
 
   runApp(
-    MultiProvider(
+    provider_pkg.MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => RoundProvider()),
-        ChangeNotifierProvider(create: (_) => GameProvider()),
+        provider_pkg.ChangeNotifierProvider(create: (_) => AuthProvider()),
+        provider_pkg.ChangeNotifierProvider(create: (_) => RoundProvider()),
+        provider_pkg.ChangeNotifierProvider(create: (_) => GameProvider()),
       ],
       child: const MyApp(),
     ),
   );
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'eFootRounds',
+      theme: ThemeData(useMaterial3: true),
+      home: const AuthWrapper(),
+    );
+  }
 }
 
-class _MyAppState extends State<MyApp> {
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
@@ -296,7 +487,7 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       theme: ThemeData(useMaterial3: true),
-      home: Consumer2<RoundProvider, GameProvider>(
+      home: provider_pkg.Consumer2<RoundProvider, GameProvider>(
         builder: (context, roundProvider, gameProvider, child) {
           return Scaffold(
             appBar: AppBar(
@@ -346,7 +537,7 @@ class _MyAppState extends State<MyApp> {
                 ),
                 if (gameProvider.isLoading)
                   CircularProgressIndicator()
-                else if (gameProvider.games.length == 0)
+                else if (gameProvider.games.isEmpty)
                   Text("Nenhum jogo encontrado para esta rodada.")
                 else
                   ...gameProvider.games.map(
