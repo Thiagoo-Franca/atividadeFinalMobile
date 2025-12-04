@@ -22,17 +22,16 @@ class AuthProvider extends ChangeNotifier {
       _initDeepLinks();
     }
 
-    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-      print('Auth state changed: ${data.event}');
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
       final session = data.session;
       _isAuthenticated = session != null;
       _user = session?.user;
-      _isLoading = false;
 
       if (session != null) {
         print('User signed in: ${_user?.email}');
+        await _ensureExists(session.user);
       }
-
+      _isLoading = false;
       notifyListeners();
     });
     _checkAuthStatus();
@@ -69,6 +68,33 @@ class AuthProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> _ensureExists(User authUser) async {
+    try {
+      final response = await Supabase.instance.client
+          .from('user')
+          .select()
+          .eq('id', authUser.id)
+          .maybeSingle();
+      if (response == null) {
+        print('Creating user record for ${authUser.email}');
+        await Supabase.instance.client.from('user').insert({
+          'id': authUser.id,
+          'email': authUser.email,
+          'name':
+              authUser.userMetadata?['name'] ??
+              authUser.email?.split('@')[0] ??
+              'Usuario',
+        });
+        print('User record created for ${authUser.email}');
+      } else {
+        print('User record already exists for ${authUser.email}');
+      }
+    } catch (e) {
+      print('Error ensuring user exists: $e');
+      _error = 'Erro ao garantir existência do usuário: $e';
     }
   }
 
@@ -205,6 +231,49 @@ class RoundProvider extends ChangeNotifier {
   }
 }
 
+class ChampionshipProvider extends ChangeNotifier {
+  List<Championship> _championships = [];
+  bool _isLoading = false;
+  String? _error;
+
+  List<Championship> get championships => _championships;
+  bool get isLoading => _isLoading;
+  String? get error => _error;
+
+  Future<void> loadChampionshipsForUser() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final currentUser = Supabase.instance.client.auth.currentUser;
+
+      if (currentUser == null) {
+        _error = 'Nenhum usuário logado';
+        _championships = [];
+        return;
+      }
+      print('Loading championships for user: ${currentUser.id}');
+
+      final results = await Supabase.instance.client
+          .from('championship')
+          .select()
+          .eq('owner_id', currentUser.id);
+
+      _championships = (results as List)
+          .map((e) => Championship.fromMap(e))
+          .toList();
+      print('Championships loaded: ${_championships.length}');
+
+      _error = null;
+    } catch (e) {
+      _error = 'Erro ao buscar campeonatos: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+}
+
 class GameProvider extends ChangeNotifier {
   List<Game> _games = [];
   List<Team> _teams = [];
@@ -303,6 +372,30 @@ class GameProvider extends ChangeNotifier {
   }
 }
 
+class AppUser {
+  final String id;
+  final String name;
+  final String email;
+
+  AppUser({required this.id, required this.name, required this.email});
+
+  factory AppUser.fromMap(Map<String, dynamic> map) => AppUser(
+    id: map['id'] as String,
+    name: map['name'] as String,
+    email: map['email'] as String,
+  );
+}
+
+class Championship {
+  final int id;
+  final String name;
+
+  Championship({required this.id, required this.name});
+
+  factory Championship.fromMap(Map<String, dynamic> map) =>
+      Championship(id: map['id'] as int, name: map['name'] as String);
+}
+
 class Team {
   final int id;
   final String name;
@@ -313,21 +406,12 @@ class Team {
       Team(id: map['id'] as int, name: map['name'] as String);
 }
 
-class Round {
-  final int id;
-  final int number;
-
-  Round({required this.id, required this.number});
-
-  factory Round.fromMap(Map<String, dynamic> map) =>
-      Round(id: map['id'] as int, number: map['number'] as int);
-}
-
 class Game {
   final int id;
   final int roundsId;
   final int timeAId;
   final int timeBId;
+  final String championshipOwnerId;
   int? golsTimeA;
   int? golsTimeB;
 
@@ -336,6 +420,7 @@ class Game {
     required this.roundsId,
     required this.timeAId,
     required this.timeBId,
+    required this.championshipOwnerId,
     this.golsTimeA,
     this.golsTimeB,
   });
@@ -363,6 +448,7 @@ class Game {
           : (map['gols_time_B'] is int
                 ? map['gols_time_B']
                 : int.parse(map['gols_time_B'].toString())),
+      championshipOwnerId: map['championshipOwner_id'] as String,
     );
   }
 }
@@ -397,6 +483,11 @@ void main() async {
     {'id': 3, 'matches_id': 2, 'time_a_id': 1, 'time_b_id': 3},
     {'id': 4, 'matches_id': 2, 'time_a_id': 2, 'time_b_id': 4},
   ]);
+  await Supabase.instance.client.from('championship').insert({
+    'id': 1,
+    'name': 'campeonato de teste',
+    'owner_id': 'ec5a3238-e307-4cfd-90d9-970619934722',
+  });
 */
 
   try {
@@ -413,12 +504,21 @@ void main() async {
   }
 
   try {
-    final results = await Supabase.instance.client.from('rounds').select();
+    final currentUser = Supabase.instance.client.auth.currentUser;
 
-    final rounds = (results as List).map((e) => Round.fromMap(e)).toList();
-    print('Dados da tabela rounds: ${rounds.length}');
-    for (var round in rounds) {
-      print('Round: id=${round.id}, number=${round.number}');
+    final results = await Supabase.instance.client.from('games').select();
+
+    if (currentUser != null) {
+      final championships = await Supabase.instance.client
+          .from('championship')
+          .select()
+          .eq('owner_id', currentUser.id);
+
+      for (var champ in championships) {
+        print('Championship owned: id=${champ['id']}, name=${champ['name']}');
+      }
+    } else {
+      print('Nenhum usuário logado');
     }
   } catch (e) {
     print('Erro ao buscar dados: $e');
@@ -442,6 +542,9 @@ void main() async {
     provider_pkg.MultiProvider(
       providers: [
         provider_pkg.ChangeNotifierProvider(create: (_) => AuthProvider()),
+        provider_pkg.ChangeNotifierProvider(
+          create: (_) => ChampionshipProvider(),
+        ),
         provider_pkg.ChangeNotifierProvider(create: (_) => RoundProvider()),
         provider_pkg.ChangeNotifierProvider(create: (_) => GameProvider()),
       ],
@@ -475,6 +578,85 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final championshipProvider = context.read<ChampionshipProvider>();
+      championshipProvider.loadChampionshipsForUser();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          "eFootRounds",
+          style: TextStyle(
+            color: const Color.fromARGB(255, 255, 249, 230),
+            fontSize: 32,
+          ),
+        ),
+        backgroundColor: Colors.red[400],
+        centerTitle: true,
+      ),
+      body: provider_pkg.Consumer<ChampionshipProvider>(
+        builder: (context, championshipProvider, child) {
+          if (championshipProvider.isLoading) {
+            return Center(child: CircularProgressIndicator());
+          }
+
+          if (championshipProvider.error != null) {
+            return Center(child: Text('Erro: ${championshipProvider.error}'));
+          }
+
+          if (championshipProvider.championships.isEmpty) {
+            return Center(child: Text("Nenhum campeonato encontrado."));
+          }
+
+          return ListView.builder(
+            itemCount: championshipProvider.championships.length,
+            itemBuilder: (context, index) {
+              final championship = championshipProvider.championships[index];
+              return ListTile(
+                title: Text(championship.name, style: TextStyle(fontSize: 20)),
+                trailing: Icon(Icons.arrow_forward_ios),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => RoundScreen(
+                        championshipId: championship.id,
+                        championshipName: championship.name,
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class RoundScreen extends StatefulWidget {
+  final int championshipId;
+  final String championshipName;
+
+  const RoundScreen({
+    super.key,
+    required this.championshipId,
+    required this.championshipName,
+  });
+
+  @override
+  State<RoundScreen> createState() => _RoundScreenState();
+}
+
+class _RoundScreenState extends State<RoundScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       final gameProvider = context.read<GameProvider>();
       final roundProvider = context.read<RoundProvider>();
 
@@ -485,111 +667,119 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      theme: ThemeData(useMaterial3: true),
-      home: provider_pkg.Consumer2<RoundProvider, GameProvider>(
-        builder: (context, roundProvider, gameProvider, child) {
-          return Scaffold(
-            appBar: AppBar(
-              title: Text(
-                "eFootRounds",
-                style: TextStyle(
-                  color: const Color.fromARGB(255, 255, 249, 230),
-                  fontSize: 32,
-                ),
+    return provider_pkg.Consumer2<RoundProvider, GameProvider>(
+      builder: (context, roundProvider, gameProvider, child) {
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(
+              widget.championshipName,
+              style: TextStyle(
+                color: const Color.fromARGB(255, 255, 249, 230),
+                fontSize: 24,
               ),
-              backgroundColor: Colors.red[400],
-              centerTitle: true,
             ),
-            body: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Row(
+            backgroundColor: Colors.red[400],
+            centerTitle: true,
+          ),
+          body: Column(
+            children: [
+              // Navegação de rodadas
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    ElevatedButton(
-                      onPressed: () {
-                        roundProvider.previousRound();
-                        gameProvider.loadGamesForCurrentRound(
-                          roundProvider.currentRound,
-                        );
-                      },
-                      child: Center(
-                        child: Icon(Icons.arrow_back_ios_new_outlined),
-                      ),
+                    IconButton(
+                      icon: Icon(Icons.arrow_back_ios_new_outlined),
+                      onPressed: roundProvider.currentRound > 1
+                          ? () {
+                              roundProvider.previousRound();
+                              gameProvider.loadGamesForCurrentRound(
+                                roundProvider.currentRound,
+                              );
+                            }
+                          : null,
                     ),
                     Text(
                       "Rodada ${roundProvider.currentRound}",
-                      style: TextStyle(fontSize: 18),
-                    ),
-                    ElevatedButton(
-                      onPressed: () {
-                        roundProvider.nextRound();
-                        gameProvider.loadGamesForCurrentRound(
-                          roundProvider.currentRound,
-                        );
-                      },
-                      child: Center(
-                        child: Icon(Icons.arrow_forward_ios_outlined),
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
                       ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.arrow_forward_ios_outlined),
+                      onPressed:
+                          roundProvider.currentRound < roundProvider.totalRounds
+                          ? () {
+                              roundProvider.nextRound();
+                              gameProvider.loadGamesForCurrentRound(
+                                roundProvider.currentRound,
+                              );
+                            }
+                          : null,
                     ),
                   ],
                 ),
-                if (gameProvider.isLoading)
-                  CircularProgressIndicator()
-                else if (gameProvider.games.isEmpty)
-                  Text("Nenhum jogo encontrado para esta rodada.")
-                else
-                  ...gameProvider.games.map(
-                    (game) => Clash(
-                      game: game,
-                      teamAName: gameProvider.getTeamName(game.timeAId),
-                      teamBName: gameProvider.getTeamName(game.timeBId),
-                    ),
-                  ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    ElevatedButton(
-                      onPressed: () {},
-                      child: Center(
-                        child: Icon(
-                          Icons.close_outlined,
-                          color: Colors.red[600],
-                        ),
-                      ),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        final gameProvider = context.read<GameProvider>();
-                        await gameProvider.saveAllGames();
+              ),
 
-                        if (gameProvider.error == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Jogos salvos com sucesso!'),
-                            ),
+              // Lista de jogos
+              Expanded(
+                child: gameProvider.isLoading
+                    ? Center(child: CircularProgressIndicator())
+                    : gameProvider.error != null
+                    ? Center(child: Text('Erro: ${gameProvider.error}'))
+                    : gameProvider.games.isEmpty
+                    ? Center(
+                        child: Text(
+                          'Nenhum jogo nesta rodada',
+                          style: TextStyle(fontSize: 16),
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: gameProvider.games.length,
+                        itemBuilder: (context, index) {
+                          final game = gameProvider.games[index];
+                          return Clash(
+                            game: game,
+                            teamAName: gameProvider.getTeamName(game.timeAId),
+                            teamBName: gameProvider.getTeamName(game.timeBId),
                           );
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Erro ao salvar jogos: ${gameProvider.error}',
+                        },
+                      ),
+              ),
+
+              // Botão salvar
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red[400],
+                    padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                  ),
+                  onPressed: gameProvider.isLoading
+                      ? null
+                      : () async {
+                          await gameProvider.saveAllGames();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Jogos salvos com sucesso!'),
+                                backgroundColor: Colors.green,
                               ),
-                            ),
-                          );
-                        }
-                      },
-                      label: Text("Salvar"),
-                      icon: Icon(Icons.check_rounded, color: Colors.green[400]),
-                    ),
-                  ],
+                            );
+                          }
+                        },
+                  child: Text(
+                    'Salvar Resultados',
+                    style: TextStyle(fontSize: 16, color: Colors.white),
+                  ),
                 ),
-              ],
-            ),
-          );
-        },
-      ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -667,6 +857,29 @@ class Clash extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class Championships extends StatelessWidget {
+  final List<Championship> championships;
+  final Function(Championship) onTap;
+
+  const Championships({
+    super.key,
+    required this.championships,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: championships.map((championship) {
+        return ListTile(
+          title: Text(championship.name),
+          onTap: () => onTap(championship),
+        );
+      }).toList(),
     );
   }
 }
