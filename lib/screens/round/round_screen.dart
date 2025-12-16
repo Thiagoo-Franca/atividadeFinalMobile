@@ -27,6 +27,7 @@ class _RoundScreenState extends State<RoundScreen> {
       final gameProvider = context.read<GameProvider>();
       final roundProvider = context.read<RoundProvider>();
 
+      roundProvider.loadRounds(widget.championshipId);
       gameProvider.loadTeams();
       gameProvider.loadGamesForCurrentRound(
         widget.championshipId,
@@ -168,6 +169,79 @@ class _RoundScreenState extends State<RoundScreen> {
         }
       }
     }
+  }
+
+  Future<void> _showRoundManagementDialog() async {
+    final roundProvider = context.read<RoundProvider>();
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Gerenciar Rodadas'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Total de rodadas: ${roundProvider.totalRounds}',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.add),
+              label: const Text('Adicionar Nova Rodada'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color.fromRGBO(0, 69, 49, 1),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                Navigator.pop(dialogContext);
+                await roundProvider.addRound(widget.championshipId);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Rodada adicionada com sucesso!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.delete),
+              label: const Text('Excluir Última Rodada'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: roundProvider.totalRounds > 1
+                  ? () async {
+                      Navigator.pop(dialogContext);
+                      await roundProvider.deleteRound(
+                        widget.championshipId,
+                        roundProvider.totalRounds,
+                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Rodada excluída com sucesso!'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                      }
+                    }
+                  : null,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Fechar'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

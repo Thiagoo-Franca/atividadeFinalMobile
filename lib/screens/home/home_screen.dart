@@ -19,6 +19,7 @@ class _HomeScreenState extends State<HomeScreen> {
       context.read<ChampionshipProvider>().loadChampionshipsForUser();
     });
   }
+
   Future<void> _showAddChampionshipDialog() async {
     final TextEditingController nameController = TextEditingController();
 
@@ -55,29 +56,33 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
 
-if (result == true && nameController.text.trim().isNotEmpty) {
-  if (context.mounted) {
-    final championshipProvider = context.read<ChampionshipProvider>();
-    
-    await championshipProvider.createChampionship(nameController.text.trim());
-    
-    if (championshipProvider.error == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Campeonato "${nameController.text}" criado com sucesso!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(championshipProvider.error!),
-          backgroundColor: Colors.red,
-        ),
-      );
+    if (result == true && nameController.text.trim().isNotEmpty) {
+      if (context.mounted) {
+        final championshipProvider = context.read<ChampionshipProvider>();
+
+        await championshipProvider.createChampionship(
+          nameController.text.trim(),
+        );
+
+        if (championshipProvider.error == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Campeonato "${nameController.text}" criado com sucesso!',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(championshipProvider.error!),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
     }
-  }
-}
 
     nameController.dispose();
   }
@@ -94,6 +99,7 @@ if (result == true && nameController.text.trim().isNotEmpty) {
         ),
         backgroundColor: const Color.fromRGBO(0, 69, 49, 1),
         centerTitle: true,
+
         actions: [
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
@@ -172,7 +178,7 @@ if (result == true && nameController.text.trim().isNotEmpty) {
           );
         },
       ),
-       floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton(
         onPressed: _showAddChampionshipDialog,
         backgroundColor: const Color.fromRGBO(0, 69, 49, 1),
         child: const Icon(Icons.add, color: Colors.white),
