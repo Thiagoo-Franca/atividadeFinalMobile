@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:myapp/controllers/auth_controller.dart';
+import 'package:myapp/controllers/championship_controller.dart';
 import 'package:provider/provider.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/championship_provider.dart';
 import '../round/round_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -16,7 +16,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ChampionshipProvider>().loadChampionshipsForUser();
+      context.read<ChampionshipController>().loadChampionships();
     });
   }
 
@@ -58,7 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (result == true && nameController.text.trim().isNotEmpty) {
       if (context.mounted) {
-        final championshipProvider = context.read<ChampionshipProvider>();
+        final championshipProvider = context.read<ChampionshipController>();
 
         await championshipProvider.createChampionship(
           nameController.text.trim(),
@@ -92,7 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: const Color.fromARGB(1, 255, 255, 255),
       appBar: AppBar(
-        toolbarHeight: 80,
+        toolbarHeight: 120,
         title: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [Image.asset('assets/images/EfootRounds.png', height: 50)],
@@ -123,13 +123,13 @@ class _HomeScreenState extends State<HomeScreen> {
               );
 
               if (confirm == true && context.mounted) {
-                await context.read<AuthProvider>().signOut();
+                await context.read<AuthController>().signOut();
               }
             },
           ),
         ],
       ),
-      body: Consumer<ChampionshipProvider>(
+      body: Consumer<ChampionshipController>(
         builder: (context, championshipProvider, child) {
           if (championshipProvider.isLoading) {
             return const Center(child: CircularProgressIndicator());

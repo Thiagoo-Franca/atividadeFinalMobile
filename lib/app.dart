@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'screens/auth/auth_wrapper.dart';
+import 'widgets/auth/auth_wrapper.dart';
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});

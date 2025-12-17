@@ -1,10 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import 'core/config/supabase_config.dart';
-import 'providers/auth_provider.dart';
-import 'providers/championship_provider.dart';
-import 'providers/round_provider.dart';
-import 'providers/game_provider.dart';
+
+// Controllers
+import 'controllers/auth_controller.dart';
+import 'controllers/championship_controller.dart';
+import 'controllers/round_controller.dart';
+import 'controllers/game_controller.dart';
+
+// Repositories
+import 'repositories/auth_repository.dart';
+import 'repositories/championship_repository.dart';
+import 'repositories/round_repository.dart';
+import 'repositories/game_repository.dart';
+
 import 'app.dart';
 
 void main() async {
@@ -15,10 +25,14 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => ChampionshipProvider()),
-        ChangeNotifierProvider(create: (_) => RoundProvider()),
-        ChangeNotifierProvider(create: (_) => GameProvider()),
+        ChangeNotifierProvider(create: (_) => AuthController(AuthRepository())),
+        ChangeNotifierProvider(
+          create: (_) => ChampionshipController(ChampionshipRepository()),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => RoundController(RoundRepository()),
+        ),
+        ChangeNotifierProvider(create: (_) => GameController(GameRepository())),
       ],
       child: const MyApp(),
     ),

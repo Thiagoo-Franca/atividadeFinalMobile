@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:myapp/providers/auth_provider.dart';
-import 'package:myapp/screens/auth/login_screen.dart';
-import 'package:myapp/screens/home/home_screen.dart';
+import 'package:myapp/controllers/auth_controller.dart';
+import 'package:myapp/widgets/auth/login_screen.dart';
+import 'package:myapp/widgets/home/home_screen.dart';
 import 'package:provider/provider.dart';
 
 class AuthWrapper extends StatelessWidget {
@@ -9,7 +9,7 @@ class AuthWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AuthProvider>(
+    return Consumer<AuthController>(
       builder: (context, authProvider, child) {
         if (authProvider.isLoading) {
           return const Scaffold(

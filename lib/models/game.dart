@@ -20,7 +20,6 @@ class Game {
   });
 
   factory Game.fromMap(Map<String, dynamic> map) {
-    print('Mapping Game from map: $map');
     return Game(
       id: map['id'] is int ? map['id'] : int.parse(map['id'].toString()),
       roundsId: map['rounds_id'] is int

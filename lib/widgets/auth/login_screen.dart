@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:myapp/providers/auth_provider.dart';
+import 'package:myapp/controllers/auth_controller.dart';
 import 'package:provider/provider.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -23,7 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
+    final authProvider = context.watch<AuthController>();
 
     return Scaffold(
       backgroundColor: const Color.fromRGBO(0, 69, 49, 1),

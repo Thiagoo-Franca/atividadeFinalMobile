@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:myapp/models/game.dart';
-import 'package:myapp/providers/game_provider.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
+import '../models/game.dart';
 
-class Clash extends StatelessWidget {
+class Clash extends StatefulWidget {
   final Game game;
   final String teamAName;
   final String teamBName;
@@ -16,62 +15,145 @@ class Clash extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final gameProvider = context.read<GameProvider>();
+  State<Clash> createState() => _ClashState();
+}
 
-    return Container(
-      color: Colors.white,
-      padding: EdgeInsets.all(16),
-      child: Center(
+class _ClashState extends State<Clash> {
+  late TextEditingController _teamAController;
+  late TextEditingController _teamBController;
+
+  @override
+  void initState() {
+    super.initState();
+    // Inicializa com valor vazio se for null, senão com o valor atual
+    _teamAController = TextEditingController(
+      text: widget.game.golsTimeA != null
+          ? widget.game.golsTimeA.toString()
+          : '',
+    );
+    _teamBController = TextEditingController(
+      text: widget.game.golsTimeB != null
+          ? widget.game.golsTimeB.toString()
+          : '',
+    );
+  }
+
+  @override
+  void didUpdateWidget(Clash oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Atualiza os controllers se o game mudou
+    if (oldWidget.game.id != widget.game.id) {
+      _teamAController.text = widget.game.golsTimeA != null
+          ? widget.game.golsTimeA.toString()
+          : '';
+      _teamBController.text = widget.game.golsTimeB != null
+          ? widget.game.golsTimeB.toString()
+          : '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _teamAController.dispose();
+    _teamBController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            Text(
-              teamAName,
-              style: TextStyle(color: Colors.black, fontSize: 16),
-            ),
-            SizedBox(
-              height: 32,
-              width: 32,
-              child: TextField(
-                textAlign: TextAlign.center,
-                keyboardType: TextInputType.number,
-                controller: TextEditingController(
-                  text: game.golsTimeA?.toString() ?? '',
-                ),
-                onChanged: (value) {
-                  final gols = int.tryParse(value);
-                  gameProvider.updateGameResultLocally(
-                    game.id,
-                    gols ?? 0,
-                    game.golsTimeB ?? 0,
-                  );
-                },
+            // Time A
+            Expanded(
+              child: Column(
+                children: [
+                  Text(
+                    widget.teamAName,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: 60,
+                    child: TextField(
+                      controller: _teamAController,
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.center,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(vertical: 8),
+                        hintText: '0',
+                      ),
+                      onChanged: (value) {
+                        // Atualiza o score no modelo
+                        widget.game.golsTimeA = value.isEmpty
+                            ? null
+                            : int.tryParse(value);
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
-            Text("X", style: TextStyle(color: Colors.black, fontSize: 16)),
-            SizedBox(
-              height: 32,
-              width: 32,
-              child: TextField(
-                textAlign: TextAlign.center,
-                keyboardType: TextInputType.number,
-                controller: TextEditingController(
-                  text: game.golsTimeB?.toString() ?? '',
+
+            // VS
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                'VS',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Color.fromRGBO(0, 69, 49, 1),
                 ),
-                onChanged: (value) {
-                  final gols = int.tryParse(value);
-                  gameProvider.updateGameResultLocally(
-                    game.id,
-                    game.golsTimeA ?? 0,
-                    gols ?? 0,
-                  );
-                },
               ),
             ),
-            Text(
-              teamBName,
-              style: TextStyle(color: Colors.black, fontSize: 16),
+
+            // Time B
+            Expanded(
+              child: Column(
+                children: [
+                  Text(
+                    widget.teamBName,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: 60,
+                    child: TextField(
+                      controller: _teamBController,
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.center,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(vertical: 8),
+                        hintText: '0',
+                      ),
+                      onChanged: (value) {
+                        // Atualiza o score no modelo
+                        widget.game.golsTimeB = value.isEmpty
+                            ? null
+                            : int.tryParse(value);
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
