@@ -111,7 +111,10 @@ class HomeScreen extends HookConsumerWidget {
             itemBuilder: (context, index) {
               final championship = championshipController.championships[index];
               return ListTile(
-                contentPadding: const EdgeInsets.symmetric(vertical: 15),
+                contentPadding: const EdgeInsets.symmetric(
+                  vertical: 30,
+                  horizontal: 20,
+                ),
                 tileColor: const Color.fromARGB(255, 216, 216, 216),
                 iconColor: const Color.fromRGBO(0, 69, 49, 1),
                 title: Text(
