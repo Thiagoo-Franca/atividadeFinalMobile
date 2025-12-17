@@ -3,7 +3,9 @@ import 'package:myapp/models/team.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class GameRepository {
-  final SupabaseClient _client = Supabase.instance.client;
+  final SupabaseClient _client;
+
+  GameRepository(this._client);
 
   Future<List<Team>> getAllTeams() async {
     try {
@@ -44,7 +46,7 @@ class GameRepository {
           .select()
           .single();
 
-      return Team.fromMap(response as Map<String, dynamic>);
+      return Team.fromMap(response);
     } catch (e) {
       throw Exception('Erro ao criar time: $e');
     }
@@ -123,7 +125,7 @@ class GameRepository {
           .select()
           .single();
 
-      return Game.fromMap(response as Map<String, dynamic>);
+      return Game.fromMap(response);
     } catch (e) {
       throw Exception('Erro ao criar jogo: $e');
     }

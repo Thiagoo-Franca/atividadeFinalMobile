@@ -41,7 +41,6 @@ class GameController extends ChangeNotifier {
 
   Future<void> loadTeamsByChampionship(int championshipId) async {
     try {
-      print('Loading teams for championship $championshipId...');
       _error = null;
 
       _teams = await _repository.getTeamsByChampionship(championshipId);

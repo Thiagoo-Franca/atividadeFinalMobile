@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class TeamStanding {
@@ -17,7 +19,7 @@ class TeamStanding {
   int get goalDifference => goalsFor - goalsAgainst;
 }
 
-class Standings extends StatefulWidget {
+class Standings extends HookConsumerWidget {
   final int championshipId;
   final String championshipName;
 
@@ -27,117 +29,84 @@ class Standings extends StatefulWidget {
     required this.championshipName,
   });
 
-  @override
-  State<Standings> createState() => _StandingsState();
-}
+  Future<List<TeamStanding>> _loadStandings() async {
+    final teamsResponse = await Supabase.instance.client
+        .from('teams')
+        .select('id, name')
+        .eq('championship_id', championshipId);
 
-class _StandingsState extends State<Standings> {
-  List<TeamStanding> _standings = [];
-  bool _isLoading = true;
-  String? _error;
+    final gamesResponse = await Supabase.instance.client
+        .from('games')
+        .select('time_a_id, time_b_id, gols_time_A, gols_time_B')
+        .eq('championship_id', championshipId)
+        .not('gols_time_A', 'is', null)
+        .not('gols_time_B', 'is', null);
 
-  @override
-  void initState() {
-    super.initState();
-    _loadStandings();
-  }
+    Map<int, TeamStanding> standingsMap = {};
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Recarrega sempre que a tela se torna visível novamente
-    if (mounted) {
-      _loadStandings();
+    for (var team in teamsResponse) {
+      standingsMap[team['id']] = TeamStanding(
+        teamId: team['id'],
+        teamName: team['name'],
+      );
     }
-  }
 
-  Future<void> _loadStandings() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
+    for (var game in gamesResponse) {
+      final timeAId = game['time_a_id'] as int;
+      final timeBId = game['time_b_id'] as int;
+      final timeAScore = game['gols_time_A'] as int;
+      final timeBScore = game['gols_time_B'] as int;
+
+      final teamA = standingsMap[timeAId];
+      final teamB = standingsMap[timeBId];
+
+      if (teamA != null && teamB != null) {
+        teamA.played += 1;
+        teamB.played += 1;
+
+        teamA.goalsFor += timeAScore;
+        teamA.goalsAgainst += timeBScore;
+        teamB.goalsFor += timeBScore;
+        teamB.goalsAgainst += timeAScore;
+
+        if (timeAScore > timeBScore) {
+          teamA.wins += 1;
+          teamA.points += 3;
+          teamB.losses += 1;
+        } else if (timeAScore < timeBScore) {
+          teamB.wins += 1;
+          teamB.points += 3;
+          teamA.losses += 1;
+        } else {
+          teamA.draws += 1;
+          teamB.draws += 1;
+          teamA.points += 1;
+          teamB.points += 1;
+        }
+      }
+    }
+
+    List<TeamStanding> standingsList = standingsMap.values.toList();
+    standingsList.sort((a, b) {
+      if (b.points != a.points) {
+        return b.points.compareTo(a.points);
+      } else if (b.goalDifference != a.goalDifference) {
+        return b.goalDifference.compareTo(a.goalDifference);
+      } else {
+        return b.goalsFor.compareTo(a.goalsFor);
+      }
     });
 
-    try {
-      final teamsResponse = await Supabase.instance.client
-          .from('teams')
-          .select('id, name')
-          .eq('championship_id', widget.championshipId);
-      final gamesResponse = await Supabase.instance.client
-          .from('games')
-          .select('time_a_id, time_b_id, gols_time_A, gols_time_B')
-          .eq('championship_id', widget.championshipId)
-          .not('gols_time_A', 'is', null)
-          .not('gols_time_B', 'is', null);
-
-      Map<int, TeamStanding> standingsMap = {};
-
-      for (var team in teamsResponse) {
-        standingsMap[team['id']] = TeamStanding(
-          teamId: team['id'],
-          teamName: team['name'],
-        );
-      }
-
-      for (var game in gamesResponse) {
-        final timeAId = game['time_a_id'] as int;
-        final timeBId = game['time_b_id'] as int;
-        final timeAScore = game['gols_time_A'] as int;
-        final timeBScore = game['gols_time_B'] as int;
-
-        final teamA = standingsMap[timeAId];
-        final teamB = standingsMap[timeBId];
-
-        if (teamA != null && teamB != null) {
-          teamA.played += 1;
-          teamB.played += 1;
-
-          teamA.goalsFor += timeAScore;
-          teamA.goalsAgainst += timeBScore;
-          teamB.goalsFor += timeBScore;
-          teamB.goalsAgainst += timeAScore;
-
-          if (timeAScore > timeBScore) {
-            teamA.wins += 1;
-            teamA.points += 3;
-            teamB.losses += 1;
-          } else if (timeAScore < timeBScore) {
-            teamB.wins += 1;
-            teamB.points += 3;
-            teamA.losses += 1;
-          } else {
-            teamA.draws += 1;
-            teamB.draws += 1;
-            teamA.points += 1;
-            teamB.points += 1;
-          }
-        }
-      }
-
-      List<TeamStanding> standingsList = standingsMap.values.toList();
-      standingsList.sort((a, b) {
-        if (b.points != a.points) {
-          return b.points.compareTo(a.points);
-        } else if (b.goalDifference != a.goalDifference) {
-          return b.goalDifference.compareTo(a.goalDifference);
-        } else {
-          return b.goalsFor.compareTo(a.goalsFor);
-        }
-      });
-
-      setState(() {
-        _standings = standingsList;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _error = e.toString();
-      });
-    }
+    return standingsList;
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final standingsFuture = useMemoized(() => _loadStandings(), [
+      championshipId,
+    ]);
+    final standingsSnapshot = useFuture(standingsFuture);
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -146,7 +115,7 @@ class _StandingsState extends State<Standings> {
           children: [
             Image.asset('assets/images/EfootRounds.png', height: 50),
             Text(
-              widget.championshipName,
+              championshipName,
               style: const TextStyle(
                 color: Color.fromARGB(255, 255, 249, 230),
                 fontSize: 24,
@@ -160,30 +129,54 @@ class _StandingsState extends State<Standings> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: _loadStandings,
+            onPressed: () {
+              // Força recarregar recriando o Future
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => Standings(
+                    championshipId: championshipId,
+                    championshipName: championshipName,
+                  ),
+                ),
+              );
+            },
             tooltip: 'Atualizar Classificação',
           ),
         ],
       ),
-      body: _isLoading
+      body: standingsSnapshot.connectionState == ConnectionState.waiting
           ? const Center(child: CircularProgressIndicator())
-          : _error != null
+          : standingsSnapshot.hasError
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Icon(Icons.error, size: 60, color: Colors.red),
                   const SizedBox(height: 16),
-                  Text(_error!, style: const TextStyle(color: Colors.red)),
+                  Text(
+                    standingsSnapshot.error.toString(),
+                    style: const TextStyle(color: Colors.red),
+                  ),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: _loadStandings,
+                    onPressed: () {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => Standings(
+                            championshipId: championshipId,
+                            championshipName: championshipName,
+                          ),
+                        ),
+                      );
+                    },
                     child: const Text('Tentar Novamente'),
                   ),
                 ],
               ),
             )
-          : _standings.isEmpty
+          : standingsSnapshot.data?.isEmpty ?? true
           ? const Center(child: Text('Nenhum jogo finalizado ainda.'))
           : SingleChildScrollView(
               child: Column(
@@ -266,9 +259,9 @@ class _StandingsState extends State<Standings> {
                   ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _standings.length,
+                    itemCount: standingsSnapshot.data!.length,
                     itemBuilder: (context, index) {
-                      final standing = _standings[index];
+                      final standing = standingsSnapshot.data![index];
                       return Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,

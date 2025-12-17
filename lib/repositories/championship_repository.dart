@@ -2,14 +2,15 @@ import 'package:myapp/models/championship.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ChampionshipRepository {
-  final SupabaseClient _client = Supabase.instance.client;
+  final SupabaseClient _client;
+
+  ChampionshipRepository(this._client);
 
   String? getCurrentUserId() {
     try {
       final user = _client.auth.currentUser;
       return user?.id;
     } catch (e) {
-      print('Error getting current user ID: $e');
       return null;
     }
   }

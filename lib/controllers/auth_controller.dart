@@ -67,9 +67,7 @@ class AuthController extends ChangeNotifier {
   }
 
   void _handleDeepLink(Uri uri) async {
-    if (uri.scheme == 'myapp' && uri.host == 'login-callback') {
-      print('OAuth callback detected: $uri');
-    }
+    if (uri.scheme == 'myapp' && uri.host == 'login-callback') {}
   }
 
   Future<void> _ensureUserExists(User authUser) async {

@@ -1,97 +1,60 @@
 import 'package:flutter/material.dart';
-import 'package:myapp/controllers/auth_controller.dart';
-import 'package:myapp/controllers/championship_controller.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:myapp/providers.dart';
+import 'package:myapp/widgets/home/dialogs/add_championship_dialog.dart';
 import '../round/round_screen.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends HookConsumerWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final championshipController = ref.watch(championshipControllerProvider);
 
-class _HomeScreenState extends State<HomeScreen> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ChampionshipController>().loadChampionships();
-    });
-  }
+    useEffect(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        championshipController.loadChampionships();
+      });
+      return null;
+    }, []);
 
-  Future<void> _showAddChampionshipDialog() async {
-    final TextEditingController nameController = TextEditingController();
+    Future<void> handleAddChampionship() async {
+      final messenger = ScaffoldMessenger.of(context);
+      final controller = ref.read(championshipControllerProvider);
 
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Novo Campeonato'),
-        content: TextField(
-          controller: nameController,
-          decoration: const InputDecoration(
-            labelText: 'Nome do campeonato',
-            hintText: 'Ex: Champions League 2024',
-            border: OutlineInputBorder(),
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color.fromRGBO(0, 69, 49, 1),
-            ),
-            onPressed: () {
-              if (nameController.text.trim().isNotEmpty) {
-                Navigator.pop(context, true);
-              }
-            },
-            child: const Text('Criar', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
+      final championshipName = await showDialog<String>(
+        context: context,
+        builder: (context) => const AddChampionshipDialog(),
+      );
 
-    if (result == true && nameController.text.trim().isNotEmpty) {
-      if (context.mounted) {
-        final championshipProvider = context.read<ChampionshipController>();
+      if (championshipName != null && context.mounted) {
+        await controller.createChampionship(championshipName);
 
-        await championshipProvider.createChampionship(
-          nameController.text.trim(),
-        );
-
-        if (championshipProvider.error == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Campeonato "${nameController.text}" criado com sucesso!',
+        if (context.mounted) {
+          if (controller.error != null) {
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text('Erro: ${controller.error}'),
+                backgroundColor: Colors.red,
               ),
-              backgroundColor: Colors.green,
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(championshipProvider.error!),
-              backgroundColor: Colors.red,
-            ),
-          );
+            );
+          } else {
+            messenger.showSnackBar(
+              const SnackBar(
+                content: Text('Campeonato criado com sucesso!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
         }
       }
     }
 
-    nameController.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color.fromARGB(1, 255, 255, 255),
       appBar: AppBar(
+        iconTheme: const IconThemeData(color: Colors.white),
         toolbarHeight: 120,
         title: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -99,7 +62,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         backgroundColor: const Color.fromRGBO(0, 69, 49, 1),
         centerTitle: true,
-
         actions: [
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
@@ -123,32 +85,33 @@ class _HomeScreenState extends State<HomeScreen> {
               );
 
               if (confirm == true && context.mounted) {
-                await context.read<AuthController>().signOut();
+                await ref.read(authControllerProvider).signOut();
               }
             },
           ),
         ],
       ),
-      body: Consumer<ChampionshipController>(
-        builder: (context, championshipProvider, child) {
-          if (championshipProvider.isLoading) {
+      body: ListenableBuilder(
+        listenable: championshipController,
+        builder: (context, _) {
+          if (championshipController.isLoading) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (championshipProvider.error != null) {
-            return Center(child: Text('Erro: ${championshipProvider.error}'));
+          if (championshipController.error != null) {
+            return Center(child: Text('Erro: ${championshipController.error}'));
           }
 
-          if (championshipProvider.championships.isEmpty) {
+          if (championshipController.championships.isEmpty) {
             return const Center(child: Text("Nenhum campeonato encontrado."));
           }
 
           return ListView.builder(
-            itemCount: championshipProvider.championships.length,
+            itemCount: championshipController.championships.length,
             itemBuilder: (context, index) {
-              final championship = championshipProvider.championships[index];
+              final championship = championshipController.championships[index];
               return ListTile(
-                contentPadding: EdgeInsets.symmetric(vertical: 15),
+                contentPadding: const EdgeInsets.symmetric(vertical: 15),
                 tileColor: const Color.fromARGB(255, 216, 216, 216),
                 iconColor: const Color.fromRGBO(0, 69, 49, 1),
                 title: Text(
@@ -179,7 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddChampionshipDialog,
+        onPressed: handleAddChampionship,
         backgroundColor: const Color.fromRGBO(0, 69, 49, 1),
         child: const Icon(Icons.add, color: Colors.white),
       ),

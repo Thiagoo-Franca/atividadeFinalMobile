@@ -1,7 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class RoundRepository {
-  final SupabaseClient _client = Supabase.instance.client;
+  final SupabaseClient _client;
+
+  RoundRepository(this._client);
 
   Future<int> getLastRound(int championshipId) async {
     try {

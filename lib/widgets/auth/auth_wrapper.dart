@@ -1,32 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:myapp/controllers/auth_controller.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:myapp/providers.dart';
 import 'package:myapp/widgets/auth/login_screen.dart';
 import 'package:myapp/widgets/home/home_screen.dart';
-import 'package:provider/provider.dart';
 
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends ConsumerWidget {
   const AuthWrapper({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Consumer<AuthController>(
-      builder: (context, authProvider, child) {
-        if (authProvider.isLoading) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authRepository = ref.watch(authRepositoryProvider);
+
+    return StreamBuilder(
+      stream: authRepository.onAuthStateChange,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Verificando autenticação...'),
-                ],
-              ),
-            ),
+            body: Center(child: CircularProgressIndicator()),
           );
         }
 
-        if (authProvider.isAuthenticated) {
+        if (snapshot.hasData && snapshot.data?.session != null) {
           return const HomeScreen();
         }
 

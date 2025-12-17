@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:myapp/controllers/game_controller.dart';
-import 'package:myapp/controllers/round_controller.dart';
-import 'package:provider/provider.dart';
-import 'package:provider/provider.dart' as provider_pkg;
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:myapp/providers.dart';
+import 'package:myapp/widgets/round/dialogs/add_team_dialog.dart';
+import 'package:myapp/widgets/round/dialogs/round_management.dart';
 import '../clash_widget.dart';
 import '../standings/standings_screen.dart';
 
-class RoundScreen extends StatefulWidget {
+class RoundScreen extends HookConsumerWidget {
   final int championshipId;
   final String championshipName;
 
@@ -17,437 +18,256 @@ class RoundScreen extends StatefulWidget {
   });
 
   @override
-  State<RoundScreen> createState() => _RoundScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final gameController = ref.watch(gameControllerProvider);
+    final roundController = ref.watch(roundControllerProvider);
 
-class _RoundScreenState extends State<RoundScreen> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final gameController = context.read<GameController>();
-      final roundController = context.read<RoundController>();
+    useEffect(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        roundController.getLastRound(championshipId);
+        gameController.loadTeams();
+        gameController.loadGamesForCurrentRound(
+          championshipId: championshipId,
+          roundNumber: roundController.currentRound,
+        );
+      });
+      return null;
+    }, []);
 
-      roundController.getLastRound(widget.championshipId);
-      gameController.loadTeams();
-      gameController.loadGamesForCurrentRound(
-        championshipId: widget.championshipId,
-        roundNumber: roundController.currentRound,
+    Future<void> handleAddTeamDialog() async {
+      final messenger = ScaffoldMessenger.of(context);
+      final controller = ref.read(gameControllerProvider);
+
+      final result = await showDialog<String>(
+        context: context,
+        builder: (context) => const AddTeamDialog(),
       );
-    });
-  }
 
-  Future<void> _showAddTeamDialog() async {
-    final gameController = context.read<GameController>();
-    final teamNameController = TextEditingController();
+      if (!context.mounted) return;
 
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Novo Time'),
-        content: TextField(
-          controller: teamNameController,
-          decoration: const InputDecoration(
-            labelText: 'Nome do Time',
-            border: OutlineInputBorder(),
-            hintText: 'Digite o nome do time',
-          ),
-          textCapitalization: TextCapitalization.words,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color.fromRGBO(0, 69, 49, 1),
-            ),
-            onPressed: () {
-              if (teamNameController.text.trim().isNotEmpty) {
-                Navigator.pop(dialogContext, true);
-              }
-            },
-            child: const Text('Criar', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
+      if (result != null && result.isNotEmpty) {
+        await controller.createTeam(
+          championshipId: championshipId,
+          teamName: result,
+        );
 
-    if (result == true && teamNameController.text.trim().isNotEmpty) {
-      if (context.mounted) {
-        try {
-          await gameController.createTeam(
-            championshipId: widget.championshipId,
-            teamName: teamNameController.text.trim(),
-          );
-
-          if (gameController.error == null) {
-            ScaffoldMessenger.of(context).showSnackBar(
+        if (context.mounted) {
+          if (controller.error != null) {
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text('Erro: ${controller.error}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          } else {
+            messenger.showSnackBar(
               const SnackBar(
                 content: Text('Time criado com sucesso!'),
                 backgroundColor: Colors.green,
               ),
             );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(gameController.error!),
-                backgroundColor: Colors.red,
-              ),
-            );
           }
-        } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Erro ao criar time: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
         }
       }
     }
 
-    teamNameController.dispose();
-  }
+    Future<void> showAddGameDialog() async {
+      final messenger = ScaffoldMessenger.of(context);
+      final controller = ref.read(gameControllerProvider);
+      final roundCtrl = ref.read(roundControllerProvider);
 
-  Future<void> _showAddGameDialog() async {
-    final gameController = context.read<GameController>();
-    final roundController = context.read<RoundController>();
+      if (controller.teams.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Nenhum time disponível. Cadastre times primeiro.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
 
-    if (gameController.teams.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nenhum time disponível. Cadastre times primeiro.'),
-          backgroundColor: Colors.red,
+      int? selectedTeamA;
+      int? selectedTeamB;
+
+      final result = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Novo Jogo'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<int>(
+                      decoration: const InputDecoration(
+                        labelText: 'Time A',
+                        border: OutlineInputBorder(),
+                      ),
+                      initialValue: selectedTeamA,
+                      items: controller.teams.map((team) {
+                        return DropdownMenuItem<int>(
+                          value: team.id,
+                          child: Text(team.name),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setDialogState(() {
+                          selectedTeamA = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'VS',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Color.fromRGBO(0, 69, 49, 1),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<int>(
+                      decoration: const InputDecoration(
+                        labelText: 'Time B',
+                        border: OutlineInputBorder(),
+                      ),
+                      initialValue: selectedTeamB,
+                      items: controller.teams.map((team) {
+                        return DropdownMenuItem<int>(
+                          value: team.id,
+                          child: Text(team.name),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setDialogState(() {
+                          selectedTeamB = value;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color.fromRGBO(0, 69, 49, 1),
+                  ),
+                  onPressed:
+                      selectedTeamA != null &&
+                          selectedTeamB != null &&
+                          selectedTeamA != selectedTeamB
+                      ? () => Navigator.pop(dialogContext, true)
+                      : null,
+                  child: const Text(
+                    'Criar',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       );
-      return;
-    }
 
-    int? selectedTeamA;
-    int? selectedTeamB;
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            title: const Text('Novo Jogo'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<int>(
-                    decoration: const InputDecoration(
-                      labelText: 'Time A',
-                      border: OutlineInputBorder(),
-                    ),
-                    initialValue: selectedTeamA,
-                    items: gameController.teams.map((team) {
-                      return DropdownMenuItem<int>(
-                        value: team.id,
-                        child: Text(team.name),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setDialogState(() {
-                        selectedTeamA = value;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  const Text(
-                    'VS',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Color.fromRGBO(0, 69, 49, 1),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  DropdownButtonFormField<int>(
-                    decoration: const InputDecoration(
-                      labelText: 'Time B',
-                      border: OutlineInputBorder(),
-                    ),
-                    initialValue: selectedTeamB,
-                    items: gameController.teams.map((team) {
-                      return DropdownMenuItem<int>(
-                        value: team.id,
-                        child: Text(team.name),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setDialogState(() {
-                        selectedTeamB = value;
-                      });
-                    },
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Cancelar'),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color.fromRGBO(0, 69, 49, 1),
-                ),
-                onPressed:
-                    selectedTeamA != null &&
-                        selectedTeamB != null &&
-                        selectedTeamA != selectedTeamB
-                    ? () => Navigator.pop(dialogContext, true)
-                    : null,
-                child: const Text(
-                  'Criar',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    if (result == true && selectedTeamA != null && selectedTeamB != null) {
-      if (context.mounted) {
-        await gameController.createGame(
-          championshipId: widget.championshipId,
-          roundsId: roundController.currentRound,
+      if (result == true && selectedTeamA != null && selectedTeamB != null) {
+        await controller.createGame(
+          championshipId: championshipId,
+          roundsId: roundCtrl.currentRound,
           timeAId: selectedTeamA!,
           timeBId: selectedTeamB!,
         );
 
-        if (gameController.error == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Jogo criado com sucesso!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(gameController.error!),
-              backgroundColor: Colors.red,
-            ),
-          );
+        if (context.mounted) {
+          if (controller.error == null) {
+            messenger.showSnackBar(
+              const SnackBar(
+                content: Text('Jogo criado com sucesso!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          } else {
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text(controller.error!),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
         }
       }
     }
-  }
 
-  Future<void> _showRoundManagementDialog() async {
-    final roundController = context.read<RoundController>();
+    Future<void> showRoundManagementDialog() async {
+      await showDialog(
+        context: context,
+        builder: (context) =>
+            RoundManagementDialog(championshipId: championshipId),
+      );
+    }
 
-    await showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Gerenciar Rodadas'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        toolbarHeight: 120,
+        title: Column(
           children: [
+            Image.asset('assets/images/EfootRounds.png', height: 50),
             Text(
-              'Total de rodadas: ${roundController.totalRounds}',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              championshipName,
+              style: const TextStyle(
+                color: Color.fromARGB(255, 255, 249, 230),
+                fontSize: 24,
+              ),
             ),
             const SizedBox(height: 20),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.add),
-              label: const Text('Adicionar Nova Rodada'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color.fromRGBO(0, 69, 49, 1),
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () async {
-                try {
-                  Navigator.pop(dialogContext);
-                  await roundController.addRound(widget.championshipId);
-
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Rodada ${roundController.totalRounds} criada! Adicione jogos a ela.',
-                        ),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-
-                    while (roundController.currentRound <
-                        roundController.totalRounds) {
-                      roundController.nextRound();
-                    }
-
-                    final gameController = context.read<GameController>();
-                    await gameController.loadGamesForCurrentRound(
-                      championshipId: widget.championshipId,
-                      roundNumber: roundController.currentRound,
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Erro ao adicionar rodada: $e'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
-              },
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.delete),
-              label: const Text('Excluir Rodada Atual'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: roundController.totalRounds > 1
-                  ? () async {
-                      // Confirmação antes de excluir
-                      final confirm = await showDialog<bool>(
-                        context: dialogContext,
-                        builder: (ctx) => AlertDialog(
-                          title: const Text('Confirmar Exclusão'),
-                          content: Text(
-                            'Deseja realmente excluir a rodada ${roundController.currentRound} e todos os seus jogos?',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(ctx, false),
-                              child: const Text('Cancelar'),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.pop(ctx, true),
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.red,
-                              ),
-                              child: const Text('Excluir'),
-                            ),
-                          ],
-                        ),
-                      );
-
-                      if (confirm == true) {
-                        try {
-                          Navigator.pop(dialogContext);
-                          final roundToDelete = roundController.currentRound;
-
-                          await roundController.deleteRound(
-                            widget.championshipId,
-                            roundToDelete,
-                          );
-
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Rodada $roundToDelete excluída com sucesso!',
-                                ),
-                                backgroundColor: Colors.orange,
-                              ),
-                            );
-
-                            final gameController = context
-                                .read<GameController>();
-                            await gameController.loadGamesForCurrentRound(
-                              championshipId: widget.championshipId,
-                              roundNumber: roundController.currentRound,
-                            );
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Erro ao excluir rodada: $e'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      }
-                    }
-                  : null,
-            ),
           ],
         ),
+        backgroundColor: const Color.fromRGBO(0, 69, 49, 1),
+        centerTitle: true,
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Fechar'),
+          IconButton(
+            icon: const Icon(Icons.group_add, color: Colors.white),
+            onPressed: handleAddTeamDialog,
+            tooltip: 'Adicionar Time',
+          ),
+          IconButton(
+            icon: const Icon(Icons.emoji_events, color: Colors.white),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => Standings(
+                    championshipId: championshipId,
+                    championshipName: championshipName,
+                  ),
+                ),
+              );
+
+              final gameCtrl = ref.read(gameControllerProvider);
+              final roundCtrl = ref.read(roundControllerProvider);
+              await gameCtrl.loadGamesForCurrentRound(
+                championshipId: championshipId,
+                roundNumber: roundCtrl.currentRound,
+              );
+            },
+            tooltip: 'Classificação',
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.white),
+            onPressed: showRoundManagementDialog,
+            tooltip: 'Gerenciar Rodadas',
           ),
         ],
       ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return provider_pkg.Consumer2<RoundController, GameController>(
-      builder: (context, roundController, gameController, child) {
-        return Scaffold(
-          backgroundColor: Colors.white,
-          appBar: AppBar(
-            toolbarHeight: 120,
-            title: Column(
-              children: [
-                Image.asset('assets/images/EfootRounds.png', height: 50),
-                Text(
-                  widget.championshipName,
-                  style: TextStyle(
-                    color: const Color.fromARGB(255, 255, 249, 230),
-                    fontSize: 24,
-                  ),
-                ),
-                const SizedBox(height: 20),
-              ],
-            ),
-            backgroundColor: const Color.fromRGBO(0, 69, 49, 1),
-            centerTitle: true,
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.group_add, color: Colors.white),
-                onPressed: _showAddTeamDialog,
-                tooltip: 'Adicionar Time',
-              ),
-              IconButton(
-                icon: const Icon(Icons.emoji_events, color: Colors.white),
-                onPressed: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => Standings(
-                        championshipId: widget.championshipId,
-                        championshipName: widget.championshipName,
-                      ),
-                    ),
-                  );
-                  final gameController = context.read<GameController>();
-                  final roundController = context.read<RoundController>();
-                  await gameController.loadGamesForCurrentRound(
-                    championshipId: widget.championshipId,
-                    roundNumber: roundController.currentRound,
-                  );
-                },
-                tooltip: 'Classificação',
-              ),
-              IconButton(
-                icon: const Icon(Icons.settings, color: Colors.white),
-                onPressed: _showRoundManagementDialog,
-                tooltip: 'Gerenciar Rodadas',
-              ),
-            ],
-          ),
-          body: Column(
+      body: ListenableBuilder(
+        listenable: Listenable.merge([gameController, roundController]),
+        builder: (context, _) {
+          return Column(
             children: [
               Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -455,12 +275,12 @@ class _RoundScreenState extends State<RoundScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     IconButton(
-                      icon: Icon(Icons.arrow_back_ios_new_outlined),
+                      icon: const Icon(Icons.arrow_back_ios_new_outlined),
                       onPressed: roundController.currentRound > 1
                           ? () {
                               roundController.previousRound();
                               gameController.loadGamesForCurrentRound(
-                                championshipId: widget.championshipId,
+                                championshipId: championshipId,
                                 roundNumber: roundController.currentRound,
                               );
                             }
@@ -468,20 +288,20 @@ class _RoundScreenState extends State<RoundScreen> {
                     ),
                     Text(
                       "Rodada ${roundController.currentRound}",
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     IconButton(
-                      icon: Icon(Icons.arrow_forward_ios_outlined),
+                      icon: const Icon(Icons.arrow_forward_ios_outlined),
                       onPressed:
                           roundController.currentRound <
                               roundController.totalRounds
                           ? () async {
                               roundController.nextRound();
                               await gameController.loadGamesForCurrentRound(
-                                championshipId: widget.championshipId,
+                                championshipId: championshipId,
                                 roundNumber: roundController.currentRound,
                               );
                             }
@@ -490,14 +310,13 @@ class _RoundScreenState extends State<RoundScreen> {
                   ],
                 ),
               ),
-
               Expanded(
                 child: gameController.isLoading
-                    ? Center(child: CircularProgressIndicator())
+                    ? const Center(child: CircularProgressIndicator())
                     : gameController.error != null
                     ? Center(child: Text('Erro: ${gameController.error}'))
                     : gameController.games.isEmpty
-                    ? Center(
+                    ? const Center(
                         child: Text(
                           'Nenhum jogo nesta rodada',
                           style: TextStyle(fontSize: 16),
@@ -515,13 +334,15 @@ class _RoundScreenState extends State<RoundScreen> {
                         },
                       ),
               ),
-
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.red[400],
-                    padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 12,
+                    ),
                   ),
                   onPressed: gameController.isLoading
                       ? null
@@ -529,29 +350,29 @@ class _RoundScreenState extends State<RoundScreen> {
                           await gameController.saveAllGames();
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
+                              const SnackBar(
                                 content: Text('Jogos salvos com sucesso!'),
                                 backgroundColor: Colors.green,
                               ),
                             );
                           }
                         },
-                  child: Text(
+                  child: const Text(
                     'Salvar Resultados',
                     style: TextStyle(fontSize: 16, color: Colors.white),
                   ),
                 ),
               ),
             ],
-          ),
-          floatingActionButton: FloatingActionButton(
-            onPressed: _showAddGameDialog,
-            backgroundColor: const Color.fromRGBO(0, 69, 49, 1),
-            tooltip: 'Adicionar Jogo',
-            child: const Icon(Icons.add, color: Colors.white),
-          ),
-        );
-      },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: showAddGameDialog,
+        backgroundColor: const Color.fromRGBO(0, 69, 49, 1),
+        tooltip: 'Adicionar Jogo',
+        child: const Icon(Icons.add, color: Colors.white),
+      ),
     );
   }
 }

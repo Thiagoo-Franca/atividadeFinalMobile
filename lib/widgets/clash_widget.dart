@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import '../models/game.dart';
 
-class Clash extends StatefulWidget {
+class Clash extends HookWidget {
   final Game game;
   final String teamAName;
   final String teamBName;
@@ -15,52 +16,24 @@ class Clash extends StatefulWidget {
   });
 
   @override
-  State<Clash> createState() => _ClashState();
-}
-
-class _ClashState extends State<Clash> {
-  late TextEditingController _teamAController;
-  late TextEditingController _teamBController;
-
-  @override
-  void initState() {
-    super.initState();
-    // Inicializa com valor vazio se for null, senão com o valor atual
-    _teamAController = TextEditingController(
-      text: widget.game.golsTimeA != null
-          ? widget.game.golsTimeA.toString()
-          : '',
-    );
-    _teamBController = TextEditingController(
-      text: widget.game.golsTimeB != null
-          ? widget.game.golsTimeB.toString()
-          : '',
-    );
-  }
-
-  @override
-  void didUpdateWidget(Clash oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Atualiza os controllers se o game mudou
-    if (oldWidget.game.id != widget.game.id) {
-      _teamAController.text = widget.game.golsTimeA != null
-          ? widget.game.golsTimeA.toString()
-          : '';
-      _teamBController.text = widget.game.golsTimeB != null
-          ? widget.game.golsTimeB.toString()
-          : '';
-    }
-  }
-
-  @override
-  void dispose() {
-    _teamAController.dispose();
-    _teamBController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final teamAController = useTextEditingController(
+      text: game.golsTimeA != null ? game.golsTimeA.toString() : '',
+    );
+    final teamBController = useTextEditingController(
+      text: game.golsTimeB != null ? game.golsTimeB.toString() : '',
+    );
+
+    useEffect(() {
+      teamAController.text = game.golsTimeA != null
+          ? game.golsTimeA.toString()
+          : '';
+      teamBController.text = game.golsTimeB != null
+          ? game.golsTimeB.toString()
+          : '';
+      return null;
+    }, [game.id, game.golsTimeA, game.golsTimeB]);
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 4,
@@ -69,12 +42,11 @@ class _ClashState extends State<Clash> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            // Time A
             Expanded(
               child: Column(
                 children: [
                   Text(
-                    widget.teamAName,
+                    teamAName,
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -85,7 +57,7 @@ class _ClashState extends State<Clash> {
                   SizedBox(
                     width: 60,
                     child: TextField(
-                      controller: _teamAController,
+                      controller: teamAController,
                       keyboardType: TextInputType.number,
                       textAlign: TextAlign.center,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -95,8 +67,7 @@ class _ClashState extends State<Clash> {
                         hintText: '0',
                       ),
                       onChanged: (value) {
-                        // Atualiza o score no modelo
-                        widget.game.golsTimeA = value.isEmpty
+                        game.golsTimeA = value.isEmpty
                             ? null
                             : int.tryParse(value);
                       },
@@ -106,7 +77,6 @@ class _ClashState extends State<Clash> {
               ),
             ),
 
-            // VS
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
               child: Text(
@@ -119,12 +89,11 @@ class _ClashState extends State<Clash> {
               ),
             ),
 
-            // Time B
             Expanded(
               child: Column(
                 children: [
                   Text(
-                    widget.teamBName,
+                    teamBName,
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -135,7 +104,7 @@ class _ClashState extends State<Clash> {
                   SizedBox(
                     width: 60,
                     child: TextField(
-                      controller: _teamBController,
+                      controller: teamBController,
                       keyboardType: TextInputType.number,
                       textAlign: TextAlign.center,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -145,8 +114,7 @@ class _ClashState extends State<Clash> {
                         hintText: '0',
                       ),
                       onChanged: (value) {
-                        // Atualiza o score no modelo
-                        widget.game.golsTimeB = value.isEmpty
+                        game.golsTimeB = value.isEmpty
                             ? null
                             : int.tryParse(value);
                       },
