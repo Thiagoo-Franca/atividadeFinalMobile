@@ -1,9 +1,5 @@
 # EfootRound ⚽
 
-![Flutter](https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white)
-![Dart](https://img.shields.io/badge/Dart-0175C2?style=for-the-badge&logo=dart&logoColor=white)
-![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)
-
 ##  Visão Geral do Projeto
 
 Aplicativo desenvolvido como projeto final da disciplina **MATC89 - Aplicações para Dispositivos Móveis** da UFBA.
@@ -166,63 +162,9 @@ await Supabase.initialize(
 # versao apenas web
 flutter run -d chrome
 ```
-
-## 📸 Screenshots
-
-### Tela Inicial
-![Home Screen](screenshots/home.png)
-
-### Gerenciamento de Times
-![Teams Screen](screenshots/teams.png)
-
-### Classificação
-![Standings Screen](screenshots/standings.png)
-
-### Rodadas
-![Rounds Screen](screenshots/rounds.png)
-
-##  Requisitos Atendidos
-
-- [x] **2 CRUDs com relação 1:N**
-  - Championships → Teams (1:N)
-  - Championships → Rounds (1:N)
-  - Rounds → Games (1:N)
-  - Teams participam de Games (N:M)
-
-- [x] **Riverpod 2.5+ com gerador de código**
-  - `@riverpod` annotations
-  - Providers gerados automaticamente
-  - Estado global gerenciado
-
-- [x] **Arquitetura em camadas**
-  - Widgets (UI)
-  - Controllers (Lógica)
-  - Repositories (Dados)
-  - Models (Entidades)
-
-- [x] **Persistência na nuvem**
-  - Supabase (PostgreSQL)
-  - Queries em tempo real
-  - Relações entre tabelas
-
-- [x] **Recurso extra**
-  - Download de classificação como imagem
-  - Uso de `package:web` e `dart:js_interop`
-  - Integração com APIs Web modernas
-
 ## Testes
 
 ```bash
 flutter analyze
 
 ```
-
-## 👥 Autor
-
-**Thiago** - Estudante de Ciência da Computação - UFBA
-
-## Licença
-
-Este projeto foi desenvolvido para fins acadêmicos na disciplina MATC89.
-
-⚽ **EfootRound** - Organize seus campeonatos com facilidade!
